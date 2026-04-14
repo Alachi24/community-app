@@ -201,7 +201,7 @@ You need **two terminals** running simultaneously:
 **Terminal 1 — Convex backend:**
 
 ```bash
-npx convex dev
+bunx convex dev
 ```
 
 **Terminal 2 — Next.js frontend:**
@@ -271,7 +271,7 @@ This runs lint, format, tests, and a production build in sequence. Fix any failu
 Also make sure:
 
 - [ ] `.env.local` is **not** included in your commit
-- [ ] `bun.lockb` is excluded unless your PR intentionally updates dependencies
+- [ ] `bun.lock` is excluded unless your PR intentionally updates dependencies
 - [ ] `convex/` folder changes are discarded — run `git restore convex/` before staging
 - [ ] Your branch is up to date with the upstream `main` branch:
 
