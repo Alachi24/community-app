@@ -47,14 +47,7 @@ assignees: ""
 
 - [ ] Authentication (Clerk sign-in / sign-up / session)
 - [ ] Profile page (avatar, bio, links)
-- [ ] Work experience section
-- [ ] Portfolio / projects section
-- [ ] Interest feature
-- [ ] Image upload
-- [ ] Share profile feature
 - [ ] Convex backend / real-time sync
-- [ ] UI / layout / styling
-- [ ] Other (describe below)
 
 ## Convex & Clerk Details _(if relevant)_
 
