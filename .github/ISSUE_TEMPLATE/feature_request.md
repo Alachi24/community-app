@@ -26,16 +26,8 @@ assignees: ""
 <!-- Check all areas this feature would touch -->
 
 - [ ] Profile page (avatar, bio, links)
-- [ ] Work experience section
-- [ ] Portfolio / projects section
-- [ ] Interest feature
-- [ ] Image upload
-- [ ] Share profile feature
 - [ ] Authentication (Clerk)
 - [ ] Convex backend / data model
-- [ ] UI / layout / styling
-- [ ] New section / page entirely
-- [ ] Other (describe below)
 
 ## User Story
 
