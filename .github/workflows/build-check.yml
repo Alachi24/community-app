@@ -1,7 +1,7 @@
 name: Build Check
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - synchronize
@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Node.js with Bun
         uses: oven-sh/setup-bun@v1
@@ -27,6 +29,7 @@ jobs:
 
       - name: Build application
         env:
+          GITHUB_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           NODE_ENV: ${{ vars.NODE_ENV }}
           CONVEX_DEPLOYMENT: ${{ vars.CONVEX_DEPLOYMENT }}
           CONVEX_DEPLOY_KEY: ${{ vars.CONVEX_DEPLOY_KEY }}
