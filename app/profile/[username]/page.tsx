@@ -1,6 +1,8 @@
 import {
   BookText,
   Briefcase,
+  Calendar,
+  ExternalLink,
   Globe,
   Link,
   Mail,
@@ -322,6 +324,7 @@ export default async function ProfileCard({
             </div>
           )}
 
+          {/* Project skills */}
           {profile.skills && profile.skills.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-6">
@@ -348,6 +351,7 @@ export default async function ProfileCard({
           {/* Projects from project table (new) */}
           <Projects userId={currentProfile.userId ?? profile.userId} />
 
+          {/* Work Experience */}
           <WorkExperienceSection userId={currentProfile.userId} />
         </div>
       </section>
