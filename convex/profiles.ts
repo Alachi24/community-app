@@ -1,5 +1,6 @@
 import { queryGeneric as query } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import { authComponent } from "./auth";
 
@@ -59,7 +60,12 @@ export const getProfileByUsername = query({
     if (!user) return null;
 
     const title = user.title ? await ctx.db.get(user.title) : null;
-    return { ...user, title };
+    const skills = user.skills
+      ? await Promise.all(
+          user.skills.map((skillId: Id<"skills">) => ctx.db.get(skillId)),
+        )
+      : [];
+    return { ...user, title, skills };
   },
 });
 
@@ -79,7 +85,7 @@ export const getProfile = query({
 
       const title = user.title ? await ctx.db.get(user.title) : null;
       return { ...user, title };
-    } catch (_error) {
+    } catch {
       // If authentication fails, return null instead of throwing
       return null;
     }
@@ -107,7 +113,7 @@ export const createProfile = mutation({
   },
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
-    if (!authUser) throw new Error("Not authenticated");
+    if (!authUser) throw new ConvexError("Not authenticated");
 
     const existing = await ctx.db
       .query("profile")
@@ -127,9 +133,9 @@ export const createProfile = mutation({
       title: null,
       shortBio: "",
       links: [],
-      projects: [],
-      workExperience: [],
       interests: [],
+      location: { city: "", country: "Nigeria" },
+      skills: [],
     });
   },
 });
@@ -142,17 +148,6 @@ export const updateProfile = mutation({
     title: v.optional(v.union(v.id("titles"), v.null())),
     shortBio: v.optional(v.string()),
     profileImage: v.optional(v.union(v.string(), v.null())),
-    workExperience: v.optional(
-      v.array(
-        v.object({
-          position: v.string(),
-          company: v.string(),
-          startDate: v.number(),
-          endDate: v.optional(v.union(v.number(), v.null())),
-          description: v.optional(v.string()),
-        }),
-      ),
-    ),
     interests: v.optional(v.array(v.string())),
     links: v.optional(
       v.array(
@@ -163,17 +158,24 @@ export const updateProfile = mutation({
         }),
       ),
     ),
+    location: v.optional(
+      v.object({
+        city: v.string(),
+        country: v.string(),
+      }),
+    ),
+    skills: v.optional(v.array(v.id("skills"))),
   },
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
-    if (!authUser) throw new Error("Not authenticated");
+    if (!authUser) throw new ConvexError("Not authenticated");
 
     const profile = await ctx.db
       .query("profile")
       .withIndex("by_email", (q) => q.eq("email", authUser.email))
       .unique();
 
-    if (!profile) throw new Error("Profile not found");
+    if (!profile) throw new ConvexError("Profile not found");
 
     await ctx.db.patch(profile._id, {
       firstName: args.firstName,
@@ -184,10 +186,10 @@ export const updateProfile = mutation({
       ...(args.profileImage !== undefined && {
         profileImage: args.profileImage,
       }),
-      ...(args.workExperience !== undefined && {
-        workExperience: args.workExperience,
-      }),
       ...(args.interests !== undefined && { interests: args.interests }),
+      ...(args.location !== undefined && { location: args.location }),
+      ...(args.links !== undefined && { links: args.links }),
+      ...(args.skills !== undefined && { skills: args.skills }),
     });
 
     return profile._id;

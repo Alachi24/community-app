@@ -1,9 +1,15 @@
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "convex/react";
-import { Globe, Link, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { Globe, GripVertical, Link, Plus, Trash2 } from "lucide-react";
+import { Reorder, useDragControls } from "motion/react";
+import { useRef, useState } from "react";
+import {
+  type FieldArrayWithId,
+  type UseFormReturn,
+  useFieldArray,
+  useForm,
+} from "react-hook-form";
 import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { GitHub, LinkedIn } from "~/components/icons";
 import { ImageUpload } from "~/components/profile/image-upload";
+import { SkillsSelect } from "~/components/profile/skills-select";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
@@ -30,6 +37,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { useTitles } from "~/hooks/useTitles";
+import { safeArray } from "~/lib/data.helpers";
 
 // ─── Link types ────────────────────────────────────────────────────────────────
 
@@ -67,6 +75,133 @@ const getLinkIcon = (tag: string) => {
 
 const usernameOnlyRegex = /^(?!.*(http|https|www\.|\/)).+$/i;
 
+const normalizeLinkForEdit = (link: {
+  tag: string;
+  title: string;
+  value: string;
+}) => {
+  const normalizedTag = link.tag === "website" ? "portfolio" : link.tag;
+
+  if (normalizedTag === "linkedin") {
+    const match = link.value.match(
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([^/?#]+)/i,
+    );
+    return {
+      ...link,
+      tag: normalizedTag,
+      value: match ? match[1] : link.value,
+    };
+  }
+
+  if (normalizedTag === "github") {
+    const match = link.value.match(
+      /(?:https?:\/\/)?(?:www\.)?github\.com\/([^/?#]+)/i,
+    );
+    return {
+      ...link,
+      tag: normalizedTag,
+      value: match ? match[1] : link.value,
+    };
+  }
+
+  return {
+    ...link,
+    tag: normalizedTag,
+  };
+};
+
+type LinkField = FieldArrayWithId<z.infer<typeof formSchema>, "links", "id">;
+
+function DraggableLinkItem({
+  field,
+  index,
+  form,
+  removeLink,
+  constraintsRef,
+}: {
+  field: LinkField;
+  index: number;
+  form: UseFormReturn<z.infer<typeof formSchema>>;
+  removeLink: (index: number) => void;
+  constraintsRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const dragControls = useDragControls();
+  const Icon = getLinkIcon(field.tag);
+  const typeConfig =
+    LINK_TYPES.find((t) => t.tag === field.tag) ?? LINK_TYPES[0];
+
+  return (
+    <Reorder.Item
+      key={field.id}
+      value={field.id}
+      drag="y"
+      dragListener={false}
+      dragControls={dragControls}
+      dragConstraints={constraintsRef}
+      className="cursor-grab"
+    >
+      <div key={field.id} className="flex items-start gap-3">
+        <div
+          className="mt-6 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted"
+          title="Drag to reorder"
+          onPointerDown={(event) => dragControls.start(event)}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+
+        <div className="mt-6.25 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+        </div>
+
+        <FormField
+          control={form.control}
+          name={`links.${index}.value`}
+          render={({ field: inputField }) => (
+            <FormItem className="flex-1">
+              <FormLabel className="select-none">{typeConfig.title}</FormLabel>
+              <FormControl>
+                {typeConfig.prefix ? (
+                  <div className="flex items-center rounded-md border overflow-hidden focus-within:ring-1 focus-within:ring-ring">
+                    <span className="px-3 py-2 text-sm text-muted-foreground bg-muted border-r shrink-0 select-none">
+                      {typeConfig.prefix}
+                    </span>
+                    <Input
+                      className="border-0 rounded-none shadow-none focus-visible:ring-0"
+                      placeholder={typeConfig.placeholder}
+                      {...inputField}
+                      onChange={(e) => {
+                        inputField.onChange(e);
+                        form.clearErrors(`links.${index}.value`);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <Input placeholder={typeConfig.placeholder} {...inputField} />
+                )}
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive mt-6.25"
+          onClick={() => {
+            form.clearErrors(`links.${index}`);
+            removeLink(index);
+          }}
+          aria-label={`Remove ${typeConfig.title} link`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </Reorder.Item>
+  );
+}
+
 // ─── Schemas ───────────────────────────────────────────────────────────────────
 
 const workExperienceSchema = z.object({
@@ -74,8 +209,19 @@ const workExperienceSchema = z.object({
   company: z.string().min(1, "Company is required"),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().min(1, "Description is required"),
+  _id: z.string().optional(),
+  location: z.enum(["remote", "hybrid", "onsite"]),
+  type: z.enum(["contract", "full-time"]),
   isCurrent: z.boolean(),
+});
+
+const _projectSchema = z.object({
+  title: z.string().min(1, "Project title is required"),
+  description: z.string().min(1, "Project description is required"),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  links: z.string().optional(), // comma-separated links
 });
 
 const linkSchema = z
@@ -124,22 +270,56 @@ const formSchema = z.object({
   shortBio: z.string().optional(),
   profileImage: z.string().optional(),
   workExperience: z.array(workExperienceSchema).optional(),
-  interests: z.string().optional(), // comma-separated
+  interests: z.string().optional(),
+  location: z
+    .object({
+      city: z.string().min(1, "City is required"),
+      country: z.string().min(1, "Country is required"),
+    })
+    .optional(),
   links: z
     .array(linkSchema)
     .max(3, { message: "You can add at most 3 links." }),
+  skills: z.array(z.string()).optional(), // array of skill IDs
 });
 
 // ─── Page component ────────────────────────────────────────────────────────────
 
 export default function Profile() {
   const profile = useQuery(api.profiles.getProfile);
+  const existingWorkExp = useQuery(
+    api.workExperience.getByUserId,
+    profile?.userId ? { userId: profile.userId } : "skip",
+  );
+
+  const mappedWorkExperience: z.infer<typeof workExperienceSchema>[] =
+    existingWorkExp?.map((exp) => ({
+      _id: exp._id,
+      position: exp.position,
+      company: exp.companyName,
+      startDate: new Date(exp.timeline.start).toISOString().split("T")[0],
+      endDate: exp.timeline.end
+        ? new Date(exp.timeline.end).toISOString().split("T")[0]
+        : "",
+      description: exp.description || "",
+      isCurrent: !exp.timeline.end,
+      location:
+        exp.location === "remote" ||
+        exp.location === "hybrid" ||
+        exp.location === "onsite"
+          ? exp.location
+          : "onsite",
+      type:
+        exp.type === "contract" || exp.type === "full-time"
+          ? exp.type
+          : "full-time",
+    })) || [];
 
   return (
     <div className="px-2 md:px-4">
       <h1 className="text-4xl font-semibold mb-8">Edit Profile</h1>
 
-      {profile ? (
+      {profile && existingWorkExp !== undefined ? (
         <ProfileForm
           initialData={{
             firstname: profile.firstName,
@@ -149,19 +329,11 @@ export default function Profile() {
             title: profile?.title?._id,
             shortBio: profile.shortBio || "",
             profileImage: profile.profileImage || "",
-            workExperience:
-              profile.workExperience?.map((exp) => ({
-                position: exp.position,
-                company: exp.company,
-                startDate: new Date(exp.startDate).toISOString().split("T")[0],
-                endDate: exp.endDate
-                  ? new Date(exp.endDate).toISOString().split("T")[0]
-                  : "",
-                description: exp.description || "",
-                isCurrent: exp.endDate === null || exp.endDate === undefined,
-              })) || [],
             interests: profile.interests?.join(", ") || "",
-            links: profile.links ?? [],
+            workExperience: mappedWorkExperience,
+            links:
+              profile.links?.map((link) => normalizeLinkForEdit(link)) ?? [],
+            skills: profile.skills || [],
           }}
         />
       ) : (
@@ -179,6 +351,7 @@ export function ProfileForm({
   initialData: Partial<z.infer<typeof formSchema>>;
 }) {
   const { titles } = useTitles();
+  const skills = useQuery(api.skills.listSkills);
   const updateProfile = useMutation(api.profiles.updateProfile);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{
@@ -186,12 +359,19 @@ export function ProfileForm({
     text: string;
   } | null>(null);
 
+  const createWorkExp = useMutation(api.workExperience.create);
+  const updateWorkExp = useMutation(api.workExperience.update);
+  const removeWorkExp = useMutation(api.workExperience.remove);
+  const profile = useQuery(api.profiles.getProfile);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       ...initialData,
       workExperience: initialData.workExperience || [],
+      location: initialData.location || { city: "", country: "Nigeria" },
       links: initialData.links || [],
+      skills: initialData.skills || [],
     },
   });
 
@@ -210,12 +390,15 @@ export function ProfileForm({
     fields: linkFields,
     append: appendLink,
     remove: removeLink,
+    move: moveLink,
   } = useFieldArray({
     control: form.control,
     name: "links",
   });
 
+  const linkConstraintsRef = useRef<HTMLDivElement>(null);
   const watchedLinks = form.watch("links") ?? [];
+  const linkFieldIds = linkFields.map((field) => field.id);
 
   const usedTags = watchedLinks.map((f) => f.tag);
   const availableLinkTypes = LINK_TYPES.filter(
@@ -223,7 +406,8 @@ export function ProfileForm({
   );
 
   function addLink(tag: LinkTag) {
-    const type = LINK_TYPES.find((t) => t.tag === tag)!;
+    const type = LINK_TYPES.find((t) => t.tag === tag);
+    if (!type) return;
     appendLink({ tag, title: type.title, value: "" });
   }
 
@@ -233,7 +417,10 @@ export function ProfileForm({
 
     try {
       const normalizedLinks = values.links.map((link) => {
-        const type = LINK_TYPES.find((t) => t.tag === link.tag)!;
+        const type = LINK_TYPES.find((t) => t.tag === link.tag);
+        if (!type) {
+          return link;
+        }
         return {
           ...link,
           value: type.prefix
@@ -249,18 +436,42 @@ export function ProfileForm({
             .filter(Boolean)
         : [];
 
-      const workExperience =
-        values.workExperience?.map((exp) => ({
-          position: exp.position,
-          company: exp.company,
-          startDate: new Date(exp.startDate).getTime(),
-          endDate:
-            exp.isCurrent || !exp.endDate
-              ? null
-              : new Date(exp.endDate).getTime(),
-          description: exp.description || "",
-        })) || [];
+      const existingIds = new Set(
+        (initialData.workExperience ?? []).map((e) => e._id).filter(Boolean),
+      );
 
+      for (const exp of values.workExperience ?? []) {
+        const timeline = {
+          start: new Date(exp.startDate).getTime(),
+          end:
+            exp.isCurrent || !exp.endDate
+              ? undefined
+              : new Date(exp.endDate).getTime(),
+        };
+        const payload = {
+          companyName: exp.company,
+          position: exp.position,
+          description: exp.description || "",
+          location: exp.location,
+          type: exp.type,
+          timeline,
+        };
+
+        if (exp._id) {
+          await updateWorkExp({
+            id: exp._id as Id<"workExperience">,
+            ...payload,
+          });
+          existingIds.delete(exp._id);
+        } else {
+          if (!profile?.userId) return;
+          await createWorkExp({ userId: profile.userId, ...payload });
+        }
+      }
+
+      for (const removedId of existingIds) {
+        await removeWorkExp({ id: removedId as Id<"workExperience"> });
+      }
       const interests = values.interests
         ? values.interests
             .split(",")
@@ -275,9 +486,10 @@ export function ProfileForm({
         title: values.title ? (values.title as Id<"titles">) : null,
         shortBio: values.shortBio || "",
         profileImage: values.profileImage || null,
-        workExperience,
         interests,
+        location: values.location || undefined,
         links: normalizedLinks,
+        skills: (values.skills || []) as Id<"skills">[],
       });
 
       setMessage({ type: "success", text: "Profile updated successfully!" });
@@ -384,6 +596,35 @@ export function ProfileForm({
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="location.city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Port-Harcourt" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="location.country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Country</FormLabel>
+                      <FormControl>
+                        <Input {...field} disabled />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
@@ -498,67 +739,41 @@ export function ProfileForm({
                 </p>
               )}
 
-              {linkFields.map((field, index) => {
-                const Icon = getLinkIcon(field.tag);
-                const typeConfig = LINK_TYPES.find((t) => t.tag === field.tag)!;
+              <div className="space-y-4" ref={linkConstraintsRef}>
+                <Reorder.Group
+                  axis="y"
+                  values={linkFieldIds}
+                  onReorder={(newOrder) => {
+                    const movedId = newOrder.find(
+                      (id, index) => id !== linkFieldIds[index],
+                    );
+                    if (!movedId) return;
 
-                return (
-                  <div key={field.id} className="flex items-start gap-3">
-                    <div className="mt-6.25 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name={`links.${index}.value`}
-                      render={({ field: inputField }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel>{typeConfig.title}</FormLabel>
-                          <FormControl>
-                            {typeConfig.prefix ? (
-                              <div className="flex items-center rounded-md border overflow-hidden focus-within:ring-1 focus-within:ring-ring">
-                                <span className="px-3 py-2 text-sm text-muted-foreground bg-muted border-r shrink-0">
-                                  {typeConfig.prefix}
-                                </span>
-                                <Input
-                                  className="border-0 rounded-none shadow-none focus-visible:ring-0"
-                                  placeholder={typeConfig.placeholder}
-                                  {...inputField}
-                                  onChange={(e) => {
-                                    inputField.onChange(e);
-
-                                    form.clearErrors(`links.${index}.value`);
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <Input
-                                placeholder={typeConfig.placeholder}
-                                {...inputField}
-                              />
-                            )}
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                    const oldIndex = linkFieldIds.indexOf(movedId);
+                    const newIndex = newOrder.indexOf(movedId);
+                    if (
+                      oldIndex !== -1 &&
+                      newIndex !== -1 &&
+                      oldIndex !== newIndex
+                    ) {
+                      moveLink(oldIndex, newIndex);
+                    }
+                  }}
+                  className="space-y-4"
+                  style={{ position: "relative" }}
+                >
+                  {linkFields.map((field, index) => (
+                    <DraggableLinkItem
+                      key={field.id}
+                      field={field}
+                      index={index}
+                      form={form}
+                      removeLink={removeLink}
+                      constraintsRef={linkConstraintsRef}
                     />
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive mt-6.25"
-                      onClick={() => {
-                        form.clearErrors(`links.${index}`);
-                        removeLink(index);
-                      }}
-                      aria-label={`Remove ${typeConfig.title} link`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })}
+                  ))}
+                </Reorder.Group>
+              </div>
             </CardContent>
           </Card>
 
@@ -578,6 +793,8 @@ export function ProfileForm({
                       startDate: "",
                       endDate: "",
                       description: "",
+                      location: "onsite",
+                      type: "full-time",
                       isCurrent: false,
                     })
                   }
@@ -600,7 +817,7 @@ export function ProfileForm({
                 workFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4"
+                    className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-4"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-semibold text-white">
@@ -644,6 +861,62 @@ export function ProfileForm({
                             <FormControl>
                               <Input placeholder="Acme Inc." {...field} />
                             </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`workExperience.${index}.location`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Location Type</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select location" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="onsite">Onsite</SelectItem>
+                                <SelectItem value="hybrid">Hybrid</SelectItem>
+                                <SelectItem value="remote">Remote</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`workExperience.${index}.type`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Employment Type</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="full-time">
+                                  Full-time
+                                </SelectItem>
+                                <SelectItem value="contract">
+                                  Contract
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -727,6 +1000,35 @@ export function ProfileForm({
                   </div>
                 ))
               )}
+            </CardContent>
+          </Card>
+
+          {/*── Skills ─────────────────────────────────────────────────── */}
+          <Card className="bg-blue-500/10 border-white/10">
+            <CardHeader>
+              <CardTitle className="text-xl text-white">Skills</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="skills"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Skills</FormLabel>
+                    <FormControl>
+                      <SkillsSelect
+                        skills={safeArray(skills)}
+                        value={field.value || []}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Select the skills that represent your expertise.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
