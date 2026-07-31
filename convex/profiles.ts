@@ -1,9 +1,9 @@
 import { queryGeneric as query } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { validateUsernameFormat } from "../lib/username";
+import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, mutation } from "./_generated/server";
-import { api } from "./_generated/api";
 import { authComponent } from "./auth";
 
 export const listProfile = query({

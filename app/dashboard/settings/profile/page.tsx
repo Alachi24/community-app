@@ -21,9 +21,9 @@ import {
 } from "@/components/ui/select";
 import { GitHub, LinkedIn } from "~/components/icons";
 import { CoverImageUpload } from "~/components/profile/cover-image-upload";
+import { BlueskyHandleCard } from "~/components/profile/BlueskyHandleCard";
 import { ImageUpload } from "~/components/profile/image-upload";
 import { SkillsSelect } from "~/components/profile/skills-select";
-import { BlueskyHandleCard } from "~/components/profile/BlueskyHandleCard";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
@@ -796,8 +796,8 @@ export function ProfileForm({
               </div>
             </CardContent>
           </Card>
-
-          {/* ── Bluesky ────────────────────────────────────────────────────── */}
+          
+          {/* ── Bluesky ────────────────────────────────────────────── */}
           <BlueskyHandleCard />
 
           {/* ── Work Experience ───────────────────────────────────────────── */}
